@@ -1760,6 +1760,11 @@ auto ComposeControls::editLastMessageRequests() const
 	return _editLastMessageRequests.events();
 }
 
+auto ComposeControls::editMessageNavigationRequests() const
+-> rpl::producer<EditMessageNavigationRequest> {
+	return _editMessageNavigationRequests.events();
+}
+
 auto ComposeControls::replyNextRequests() const
 -> rpl::producer<ReplyNextRequest> {
 	return _replyNextRequests.events();
@@ -2383,12 +2388,43 @@ void ComposeControls::initKeyHandler() {
 		}
 	}, _wrap->lifetime());
 
-	base::install_event_filter(_wrap.get(), _field, [=](not_null<QEvent*> e) {
+	base::install_event_filter(_wrap.get(), _field->rawTextEdit(), [=](not_null<QEvent*> e) {
 		using Result = base::EventFilterResult;
+
+		if (e->type() == QEvent::FocusOut) {
+			_editNavigationActive = false;
+			return Result::Continue;
+		}
+		if (e->type() == QEvent::KeyRelease) {
+			const auto k = static_cast<QKeyEvent*>(e.get());
+			if (k->key() == Qt::Key_Shift
+				|| !(k->modifiers() & Qt::ShiftModifier)) {
+				_editNavigationActive = false;
+			}
+			return Result::Continue;
+		}
 		if (e->type() != QEvent::KeyPress) {
 			return Result::Continue;
 		}
+
 		const auto k = static_cast<QKeyEvent*>(e.get());
+		const auto next = Shortcuts::LookupEditNavigation(k);
+		if (!(k->modifiers() & Qt::ShiftModifier)) {
+			_editNavigationActive = false;
+		}
+		if (next) {
+			const auto start = !isEditingMessage() && _field->empty();
+			if (!_editNavigationActive && !start) {
+				return Result::Continue;
+			}
+
+			_editNavigationActive = true;
+			_editMessageNavigationRequests.fire({
+				.fromId = _editingId,
+				.next = *next,
+			});
+			return Result::Cancel;
+		}
 
 		if ((k->modifiers() & kCommonModifiers) == Qt::ControlModifier) {
 			const auto isUp = (k->key() == Qt::Key_Up);

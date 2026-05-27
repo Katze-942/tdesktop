@@ -735,6 +735,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_shortcuts_just_send" = "Just send";
 "lng_shortcuts_silent_send" = "Silent send";
 "lng_shortcuts_schedule" = "Schedule";
+"lng_shortcuts_edit_previous_message" = "Edit previous message";
+"lng_shortcuts_edit_next_message" = "Edit next message";
 "lng_shortcuts_read_chat" = "Mark chat as read";
 "lng_shortcuts_archive_chat" = "Archive chat";
 "lng_shortcuts_media_fullscreen" = "Toggle video fullscreen";

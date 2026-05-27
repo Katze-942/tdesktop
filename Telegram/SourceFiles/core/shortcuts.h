@@ -69,6 +69,9 @@ enum class Command {
 	SendSilentMessage,
 	ScheduleMessage,
 
+	EditPreviousMessage,
+	EditNextMessage,
+
 	RecordVoice,
 	RecordRound,
 
@@ -136,6 +139,8 @@ void Listen(not_null<QWidget*> widget);
 
 bool Launch(Command command);
 bool HandleEvent(not_null<QObject*> object, not_null<QShortcutEvent*> event);
+[[nodiscard]] std::optional<bool> LookupEditNavigation(
+	not_null<QKeyEvent*> event);
 
 bool HandlePossibleChatSwitch(not_null<QKeyEvent*> event);
 
