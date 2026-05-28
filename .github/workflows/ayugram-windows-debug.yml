@@ -155,7 +155,14 @@ jobs:
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
-          move %OUT%\Telegram.exe artifact/
+          if exist "%OUT%\AyuGram.exe" (
+            move "%OUT%\AyuGram.exe" artifact/
+          ) else if exist "%OUT%\Telegram.exe" (
+            move "%OUT%\Telegram.exe" artifact/
+          ) else (
+            echo Build error, output app file does not exist.
+            exit /b 1
+          )
           if exist %OUT%\Updater.exe move %OUT%\Updater.exe artifact/
 
       - name: Upload artifact.

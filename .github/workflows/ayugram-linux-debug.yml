@@ -85,11 +85,15 @@ jobs:
 
       - name: Check.
         run: |
-          filePath="out/Debug/Telegram"
+          filePath="out/Debug/AyuGram"
+          if ! test -f "$filePath"; then
+            filePath="out/Debug/Telegram"
+          fi
           if test -f "$filePath"; then
             echo "Build successfully done."
             size=$(stat -c %s "$filePath")
             echo "File size of ${filePath}: ${size} Bytes."
+            echo "APP_PATH=${filePath}" >> "$GITHUB_ENV"
           else
             echo "Build error, output file does not exist."
             exit 1
@@ -98,7 +102,7 @@ jobs:
       - name: Move artifact.
         run: |
           mkdir -p out/Debug/artifact
-          mv out/Debug/Telegram out/Debug/artifact/
+          mv "$APP_PATH" out/Debug/artifact/
           if test -f out/Debug/Updater; then
             mv out/Debug/Updater out/Debug/artifact/
           fi
