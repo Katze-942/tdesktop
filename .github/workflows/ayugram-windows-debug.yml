@@ -63,14 +63,16 @@ jobs:
           nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
 
       - name: ThirdParty cache.
-        uses: actions/cache@v5
+        id: third-party-cache
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.TBUILD }}\ThirdParty
           key: ${{ runner.OS }}-x64-third-party-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-x64-third-party-
 
       - name: Libraries cache.
-        uses: actions/cache@v5
+        id: libraries-cache
+        uses: actions/cache/restore@v5
         with:
           path: |
             ${{ env.LibrariesPath }}\*
@@ -82,7 +84,8 @@ jobs:
           restore-keys: ${{ runner.OS }}-x64-libs-
 
       - name: Qt cache.
-        uses: actions/cache@v5
+        id: qt-cache
+        uses: actions/cache/restore@v5
         with:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
@@ -100,6 +103,37 @@ jobs:
       - name: Free up some disk space.
         shell: bash
         run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' ')' -type f ')' -o -empty ')' -delete
+
+      - name: Save ThirdParty cache.
+        if: success() && steps.third-party-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: ${{ runner.OS }}-x64-third-party-${{ env.CACHE_KEY }}
+
+      - name: Save libraries cache.
+        if: success() && steps.libraries-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\*
+            !${{ env.LibrariesPath }}\cache_keys
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.OS }}-x64-libs-${{ env.CACHE_KEY }}
+
+      - name: Save Qt cache.
+        if: success() && steps.qt-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.OS }}-x64-qt6-${{ env.CACHE_KEY }}
 
       - name: Telegram Desktop build.
         run: |
