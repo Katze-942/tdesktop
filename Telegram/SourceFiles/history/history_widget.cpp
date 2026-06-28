@@ -34,6 +34,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/core_settings.h"
 #include "core/file_utilities.h"
 #include "core/mime_type.h"
+#include "core/shortcuts.h"
 #include "history/view/history_view_draw_to_reply.h"
 #include "ui/emoji_config.h"
 #include "ui/chat/attach/attach_prepare.h"
@@ -5876,8 +5877,29 @@ void HistoryWidget::insertTextAtCursor(const QString &text) {
 }
 
 bool HistoryWidget::eventFilter(QObject *obj, QEvent *e) {
-	if (e->type() == QEvent::KeyPress) {
+	if (e->type() == QEvent::FocusOut) {
+		_editNavigationActive = false;
+	} else if (e->type() == QEvent::KeyRelease) {
 		const auto k = static_cast<QKeyEvent*>(e);
+		if (k->key() == Qt::Key_Shift
+			|| !(k->modifiers() & Qt::ShiftModifier)) {
+			_editNavigationActive = false;
+		}
+	} else if (e->type() == QEvent::KeyPress) {
+		const auto k = static_cast<QKeyEvent*>(e);
+		if (!(k->modifiers() & Qt::ShiftModifier)) {
+			_editNavigationActive = false;
+		}
+		if (const auto next = Shortcuts::LookupEditNavigation(k)) {
+			const auto start = !_editMsgId
+				&& canWriteMessage()
+				&& _field->empty();
+			if (_editNavigationActive || start) {
+				_editNavigationActive = true;
+				editMessageByNavigation(_editMsgId, *next);
+				return true;
+			}
+		}
 		if ((k->modifiers() & kCommonModifiers) == Qt::ControlModifier) {
 			if (k->key() == Qt::Key_Up) {
 #ifdef Q_OS_MAC
@@ -5903,6 +5925,62 @@ bool HistoryWidget::eventFilter(QObject *obj, QEvent *e) {
 		}
 	}
 	return RpWidget::eventFilter(obj, e);
+}
+
+bool HistoryWidget::editMessageByNavigation(MsgId fromId, bool next) {
+	if (!_history) {
+		return false;
+	}
+	const auto now = base::unixtime::now();
+	const auto itemToEdit = [&](HistoryView::Element *view) {
+		const auto item = view->data();
+		return (!item->isLocal()
+			&& !item->isUploading()
+			&& item->allowsEdit(now))
+			? session().data().groups().findItemToEdit(item).get()
+			: nullptr;
+	};
+	const auto edit = [&](HistoryView::Element *view) {
+		if (const auto item = itemToEdit(view)) {
+			controller()->showMessage(item);
+			editMessage(item, {});
+			return true;
+		}
+		return false;
+	};
+	if (!fromId) {
+		auto view = _history->findLastDisplayed();
+		while (view) {
+			if (edit(view)) {
+				return true;
+			}
+			view = view->previousDisplayedInBlocks();
+		}
+		return false;
+	}
+	const auto step = [=](HistoryView::Element *view) {
+		return next
+			? view->nextDisplayedInBlocks()
+			: view->previousDisplayedInBlocks();
+	};
+	auto view = next
+		? _history->findFirstDisplayed()
+		: _history->findLastDisplayed();
+	while (view) {
+		const auto item = itemToEdit(view);
+		if (item && item->id == fromId) {
+			view = step(view);
+			break;
+		}
+		view = step(view);
+	}
+	while (view) {
+		if (edit(view)) {
+			return true;
+		}
+		view = step(view);
+	}
+	return false;
 }
 
 bool HistoryWidget::floatPlayerHandleWheelEvent(QEvent *e) {

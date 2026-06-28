@@ -942,6 +942,13 @@ void ChatWidget::setupComposeControls() {
 		}
 	}, lifetime());
 
+	_composeControls->editMessageNavigationRequests(
+	) | rpl::on_next([=](auto &&request) {
+		(void)_inner->editMessageNavigationRequestNotify(
+			request.fromId,
+			request.next);
+	}, lifetime());
+
 	_composeControls->replyNextRequests(
 	) | rpl::on_next([=](ComposeControls::ReplyNextRequest &&data) {
 		using Direction = ComposeControls::ReplyNextRequest::Direction;

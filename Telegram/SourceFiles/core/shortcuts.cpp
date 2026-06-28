@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "platform/platform_specific.h"
 
 #include <QAction>
+#include <QKeyEvent>
 #include <QShortcut>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
@@ -69,6 +70,11 @@ const auto SupportCommands = base::flat_set<Command>{
 	Command::SupportScrollToCurrent,
 	Command::SupportHistoryBack,
 	Command::SupportHistoryForward,
+};
+
+const auto LocalCommands = base::flat_set<Command>{
+	Command::EditPreviousMessage,
+	Command::EditNextMessage,
 };
 
 const auto CommandByName = base::flat_map<QString, Command>{
@@ -128,6 +134,8 @@ const auto CommandByName = base::flat_map<QString, Command>{
 	{ u"show_chat_preview"_q , Command::ShowChatPreview },
 
 	{ u"record_voice"_q      , Command::RecordVoice },
+	{ u"edit_previous_message"_q , Command::EditPreviousMessage },
+	{ u"edit_next_message"_q     , Command::EditNextMessage },
 
 	// Shortcuts that have no default values.
 	{ u"message"_q                       , Command::JustSendMessage },
@@ -177,6 +185,8 @@ public:
 	void toggleSupport(bool toggled);
 	void listen(not_null<QWidget*> widget);
 	[[nodiscard]] bool handles(const QKeySequence &sequence) const;
+	[[nodiscard]] std::optional<bool> lookupEditNavigation(
+		not_null<QKeyEvent*> event) const;
 
 	[[nodiscard]] const QStringList &errors() const;
 
@@ -203,6 +213,8 @@ private:
 	void remove(const QString &keys);
 	void remove(const QKeySequence &keys);
 	void remove(const QKeySequence &keys, Command command);
+	void removeLocal(const QKeySequence &keys);
+	void removeLocal(const QKeySequence &keys, Command command);
 	void unregister(base::unique_qptr<QAction> shortcut);
 
 	void pruneListened();
@@ -211,6 +223,7 @@ private:
 
 	base::flat_map<QKeySequence, base::unique_qptr<QAction>> _shortcuts;
 	base::flat_multi_map<not_null<QObject*>, Command> _commandByObject;
+	base::flat_map<QKeySequence, base::flat_set<Command>> _localShortcuts;
 	std::vector<QPointer<QWidget>> _listened;
 
 	base::flat_map<QKeySequence, base::flat_set<Command>> _defaults;
@@ -296,6 +309,7 @@ void Manager::clear() {
 	_errors.clear();
 	_shortcuts.clear();
 	_commandByObject.clear();
+	_localShortcuts.clear();
 	_mediaShortcuts.clear();
 	_supportShortcuts.clear();
 }
@@ -317,6 +331,11 @@ auto Manager::keysCurrents() const
 		const auto end = _commandByObject.end();
 		for (; i != end && (i->first == command); ++i) {
 			result[keys].emplace(i->second);
+		}
+	}
+	for (const auto &[keys, commands] : _localShortcuts) {
+		for (const auto command : commands) {
+			result[keys].emplace(command);
 		}
 	}
 	return result;
@@ -343,6 +362,9 @@ void Manager::change(
 void Manager::resetToDefaults() {
 	while (!_shortcuts.empty()) {
 		remove(_shortcuts.begin()->first);
+	}
+	while (!_localShortcuts.empty()) {
+		removeLocal(_localShortcuts.begin()->first);
 	}
 	for (const auto &[sequence, commands] : _defaults) {
 		for (const auto command : commands) {
@@ -384,6 +406,25 @@ void Manager::listen(not_null<QWidget*> widget) {
 
 bool Manager::handles(const QKeySequence &sequence) const {
 	return _shortcuts.contains(sequence);
+}
+
+std::optional<bool> Manager::lookupEditNavigation(
+		not_null<QKeyEvent*> event) const {
+	const auto modifiers = event->modifiers()
+		& (Qt::ShiftModifier
+			| Qt::MetaModifier
+			| Qt::ControlModifier
+			| Qt::AltModifier);
+	const auto sequence = QKeySequence(event->key() | int(modifiers));
+	const auto i = _localShortcuts.find(sequence);
+	if (i == end(_localShortcuts)) {
+		return std::nullopt;
+	} else if (i->second.contains(Command::EditNextMessage)) {
+		return true;
+	} else if (i->second.contains(Command::EditPreviousMessage)) {
+		return false;
+	}
+	return std::nullopt;
 }
 
 void Manager::pruneListened() {
@@ -534,6 +575,9 @@ void Manager::fillDefaults() {
 	set(u"ctrl+\\"_q, Command::ShowChatMenu);
 	set(u"ctrl+]"_q, Command::ShowChatPreview);
 
+	set(u"shift+up"_q, Command::EditPreviousMessage);
+	set(u"shift+down"_q, Command::EditNextMessage);
+
 	set(u"ctrl+r"_q, Command::RecordVoice);
 
 	_defaults = keysCurrents();
@@ -557,12 +601,9 @@ void Manager::writeDefaultFile() {
 	version.insert(u"version"_q, QString::number(AppVersion));
 	shortcuts.push_back(version);
 
-	for (const auto &[sequence, shortcut] : _shortcuts) {
-		const auto object = shortcut.get();
-		auto i = _commandByObject.findFirst(object);
-		const auto end = _commandByObject.end();
-		for (; i != end && i->first == object; ++i) {
-			const auto j = CommandNames().find(i->second);
+	for (const auto &[sequence, commands] : keysCurrents()) {
+		for (const auto command : commands) {
+			const auto j = CommandNames().find(command);
 			if (j != CommandNames().end()) {
 				QJsonObject entry;
 				entry.insert(u"keys"_q, sequence.toString().toLower());
@@ -591,36 +632,25 @@ void Manager::writeDefaultFile() {
 
 void Manager::writeCustomFile() {
 	auto shortcuts = QJsonArray();
-	for (const auto &[sequence, shortcut] : _shortcuts) {
-		const auto object = shortcut.get();
-		auto i = _commandByObject.findFirst(object);
-		const auto end = _commandByObject.end();
-		for (; i != end && i->first == object; ++i) {
-			const auto d = _defaults.find(sequence);
-			if (d == _defaults.end() || !d->second.contains(i->second)) {
-				const auto j = CommandNames().find(i->second);
-				if (j != CommandNames().end()) {
-					QJsonObject entry;
-					entry.insert(u"keys"_q, sequence.toString().toLower());
-					entry.insert(u"command"_q, j->second);
-					shortcuts.append(entry);
-				}
+	const auto currents = keysCurrents();
+	for (const auto &[sequence, commands] : currents) {
+		const auto d = _defaults.find(sequence);
+		for (const auto command : commands) {
+			if (d != _defaults.end() && d->second.contains(command)) {
+				continue;
+			}
+			const auto j = CommandNames().find(command);
+			if (j != CommandNames().end()) {
+				QJsonObject entry;
+				entry.insert(u"keys"_q, sequence.toString().toLower());
+				entry.insert(u"command"_q, j->second);
+				shortcuts.append(entry);
 			}
 		}
 	}
-	const auto has = [&](not_null<QObject*> shortcut, Command command) {
-		for (auto i = _commandByObject.findFirst(shortcut)
-			; i != end(_commandByObject) && i->first == shortcut
-			; ++i) {
-			if (i->second == command) {
-				return true;
-			}
-		}
-		return false;
-	};
 	for (const auto &[sequence, commands] : _defaults) {
-		const auto i = _shortcuts.find(sequence);
-		if (i == end(_shortcuts)) {
+		const auto i = currents.find(sequence);
+		if (i == end(currents)) {
 			QJsonObject entry;
 			entry.insert(u"keys"_q, sequence.toString().toLower());
 			entry.insert(u"command"_q, QJsonValue());
@@ -628,7 +658,7 @@ void Manager::writeCustomFile() {
 			continue;
 		}
 		for (const auto command : commands) {
-			if (!has(i->second.get(), command)) {
+			if (!i->second.contains(command)) {
 				const auto j = CommandNames().find(command);
 				if (j != CommandNames().end()) {
 					QJsonObject entry;
@@ -680,6 +710,15 @@ void Manager::set(
 		const QKeySequence &keys,
 		Command command,
 		bool replace) {
+	if (LocalCommands.contains(command)) {
+		if (replace) {
+			remove(keys);
+		}
+		_localShortcuts[keys].emplace(command);
+		return;
+	} else if (replace) {
+		removeLocal(keys);
+	}
 	auto shortcut = base::make_unique_q<QAction>();
 	shortcut->setShortcut(keys);
 	shortcut->setShortcutContext(Qt::ApplicationShortcut);
@@ -734,6 +773,7 @@ void Manager::remove(const QKeySequence &keys) {
 		unregister(std::move(i->second));
 		_shortcuts.erase(i);
 	}
+	removeLocal(keys);
 }
 
 void Manager::remove(const QKeySequence &keys, Command command) {
@@ -744,6 +784,22 @@ void Manager::remove(const QKeySequence &keys, Command command) {
 			unregister(std::move(i->second));
 			_shortcuts.erase(i);
 		}
+	}
+	removeLocal(keys, command);
+}
+
+void Manager::removeLocal(const QKeySequence &keys) {
+	_localShortcuts.remove(keys);
+}
+
+void Manager::removeLocal(const QKeySequence &keys, Command command) {
+	const auto i = _localShortcuts.find(keys);
+	if (i == end(_localShortcuts)) {
+		return;
+	}
+	i->second.remove(command);
+	if (i->second.empty()) {
+		_localShortcuts.erase(i);
 	}
 }
 
@@ -890,6 +946,10 @@ bool HandleEvent(
 		return false;
 	}
 	return Launch(Data.lookup(object));
+}
+
+std::optional<bool> LookupEditNavigation(not_null<QKeyEvent*> event) {
+	return Data.lookupEditNavigation(event);
 }
 
 rpl::producer<ChatSwitchRequest> ChatSwitchRequests() {

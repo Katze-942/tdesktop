@@ -1091,16 +1091,24 @@ bool SuggestionsController::fieldFilter(not_null<QEvent*> event) {
 	} break;
 
 	case QEvent::KeyPress: {
-		const auto key = static_cast<QKeyEvent*>(event.get())->key();
+		const auto keyEvent = static_cast<QKeyEvent*>(event.get());
+		const auto key = keyEvent->key();
 		switch (key) {
 		case Qt::Key_Enter:
 		case Qt::Key_Return:
 		case Qt::Key_Tab:
+			if (_shown && !_forceHidden) {
+				return _suggestions->handleKeyEvent(key);
+			}
+			break;
+
 		case Qt::Key_Up:
 		case Qt::Key_Down:
 		case Qt::Key_Left:
 		case Qt::Key_Right:
-			if (_shown && !_forceHidden) {
+			if (_shown
+				&& !_forceHidden
+				&& !(keyEvent->modifiers() & Qt::ShiftModifier)) {
 				return _suggestions->handleKeyEvent(key);
 			}
 			break;

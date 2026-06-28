@@ -4929,6 +4929,58 @@ bool ListWidget::lastMessageEditRequestNotify() const {
 	}
 }
 
+bool ListWidget::editMessageNavigationRequestNotify(
+		FullMsgId fromId,
+		bool next) {
+	const auto now = base::unixtime::now();
+	const auto itemToEdit = [&](not_null<Element*> view) {
+		const auto item = view->data();
+		return (!item->isLocal()
+			&& !item->isUploading()
+			&& item->allowsEdit(now))
+			? session().data().groups().findItemToEdit(item).get()
+			: nullptr;
+	};
+	const auto notify = [&](not_null<Element*> view) {
+		if (const auto item = itemToEdit(view)) {
+			showAtPosition(item->position(), Window::SectionShow());
+			editMessageRequestNotify(item->fullId());
+			return true;
+		}
+		return false;
+	};
+	const auto matches = [&](not_null<Element*> view) {
+		const auto item = itemToEdit(view);
+		return item && (item->fullId() == fromId);
+	};
+	if (!fromId) {
+		const auto list = ranges::views::reverse(_items);
+		const auto i = ranges::find_if(list, [&](not_null<Element*> view) {
+			return itemToEdit(view) != nullptr;
+		});
+		return (i != end(list)) && notify(*i);
+	}
+	const auto current = ranges::find_if(_items, matches);
+	if (current == end(_items)) {
+		return false;
+	}
+	if (next) {
+		for (auto i = current + 1; i != end(_items); ++i) {
+			if (notify(*i)) {
+				return true;
+			}
+		}
+	} else {
+		auto i = current;
+		while (i != begin(_items)) {
+			if (notify(*--i)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 auto ListWidget::replyToMessageRequested() const
 -> rpl::producer<ReplyToMessageRequest> {
 	return _requestedToReplyToMessage.events();

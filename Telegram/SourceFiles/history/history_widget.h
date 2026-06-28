@@ -571,6 +571,7 @@ private:
 	void cancelReplyAfterMediaSend(bool lastKeyboardUsed);
 	bool replyToPreviousMessage();
 	bool replyToNextMessage();
+	bool editMessageByNavigation(MsgId fromId, bool next);
 	[[nodiscard]] bool showSlowmodeError();
 
 	void hideChildWidgets();
@@ -745,6 +746,7 @@ private:
 	HistoryItem *_processingReplyItem = nullptr;
 
 	MsgId _editMsgId = 0;
+	bool _editNavigationActive = false;
 	std::shared_ptr<Data::PhotoMedia> _photoEditMedia;
 	bool _canReplaceMedia = false;
 	bool _canAddMedia = false;

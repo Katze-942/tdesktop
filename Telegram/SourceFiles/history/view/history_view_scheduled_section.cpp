@@ -460,6 +460,13 @@ void ScheduledWidget::setupComposeControls() {
 		}
 	}, lifetime());
 
+	_composeControls->editMessageNavigationRequests(
+	) | rpl::on_next([=](auto &&request) {
+		(void)_inner->editMessageNavigationRequestNotify(
+			request.fromId,
+			request.next);
+	}, lifetime());
+
 	_composeControls->setMimeDataHook([=](
 		not_null<const QMimeData*> data,
 		Ui::InputField::MimeAction action) {

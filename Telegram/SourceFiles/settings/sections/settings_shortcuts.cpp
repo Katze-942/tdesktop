@@ -109,6 +109,8 @@ struct Labeled {
 		{ C::JustSendMessage, tr::lng_shortcuts_just_send() },
 		{ C::SendSilentMessage, tr::lng_shortcuts_silent_send() },
 		{ C::ScheduleMessage, tr::lng_shortcuts_schedule() },
+		{ C::EditPreviousMessage, tr::lng_shortcuts_edit_previous_message() },
+		{ C::EditNextMessage, tr::lng_shortcuts_edit_next_message() },
 		separator,
 		{ C::ComposeAiApplyInPlace, tr::lng_shortcuts_ai_compose_apply() },
 		{ C::ToggleWebPagePreview, tr::lng_shortcuts_toggle_link_preview() },
