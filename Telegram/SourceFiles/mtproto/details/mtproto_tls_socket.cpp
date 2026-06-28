@@ -169,7 +169,7 @@ using BigNumContext = openssl::Context;
 		}
 		StartPermutationElement(); {
 			S(""
-				"\x00\x10\x00\x0e\x00\x0c\x02\x68\x32\x08\x68\x74\x74\x70"
+				"\x00\x10\x00\x0b\x00\x09\x08\x68\x74\x74\x70"
 				"\x2f\x31\x2e\x31"_q);
 		}
 		StartPermutationElement(); {
@@ -200,9 +200,6 @@ using BigNumContext = openssl::Context;
 			K();
 			S("\x00\x1d\x00\x20"_q);
 			K();
-		}
-		StartPermutationElement(); {
-			S("\x44\xcd\x00\x05\x00\x03\x02\x68\x32"_q);
 		}
 		StartPermutationElement(); {
 			S("\xfe\x0d"_q);
